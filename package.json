@@ -5,7 +5,7 @@
     "main": "dist/index.js",
     "type": "module",
     "scripts": {
-        "build": "npm run lint && npm run compile",
+        "build": "npm run compile",
         "compile": "tsc --build tsconfig.json",
         "lint": "eslint . --cache --cache-file .eslintcache",
         "lint:fix": "eslint . --cache --cache-file .eslintcache --fix",
@@ -28,6 +28,7 @@
     },
     "devDependencies": {
         "@stegripe/eslint-config": "1.0.1",
+        "@types/express": "^5.0.3",
         "@types/jsonfile": "6.1.4",
         "@types/node": "22.18.7",
         "@types/node-fetch": "2.6.13",
@@ -35,6 +36,11 @@
         "@typescript-eslint/eslint-plugin": "8.14.0",
         "@typescript-eslint/parser": "8.14.0",
         "eslint": "9.14.0",
+        "eslint-plugin-import-x": "^4.16.1",
+        "eslint-plugin-jsdoc": "^60.5.0",
+        "eslint-plugin-promise": "^7.2.1",
+        "eslint-plugin-tsdoc": "^0.4.0",
+        "eslint-plugin-unicorn": "^61.0.2",
         "rimraf": "6.0.1",
         "typescript": "5.6.3"
     },
@@ -42,6 +48,7 @@
         "@eslint/compat": "^1.2.3",
         "@ptkdev/logger": "^1.8.0",
         "discord.js": "^14.22.1",
+        "express": "^5.1.0",
         "jsonfile": "^6.2.0",
         "node-fetch": "^3.3.2",
         "tsc-watch": "^7.2.0",

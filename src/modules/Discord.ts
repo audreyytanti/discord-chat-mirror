@@ -1,3 +1,21 @@
+// Add this code block at the very top of src/modules/Discord.ts
+
+const express = require('express');
+const app = express();
+const port = process.env.PORT || 3000; 
+
+// 1. Create a simple endpoint for UptimeRobot to ping
+app.get('/', (req, res) => {
+  res.send('Bot is running!');
+});
+
+// 2. Start the web server
+app.listen(port, () => {
+  console.log(`Web server listening at port ${port}`);
+});
+
+// The rest of your Discord.ts code follows here...
+
 /* eslint-disable no-await-in-loop */
 /* eslint-disable id-length */
 import process from "node:process";
