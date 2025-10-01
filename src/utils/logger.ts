@@ -1,10 +1,13 @@
 /* eslint-disable typescript/naming-convention */
-// Note: We remove the import of 'LoggerOptions' as it was causing TS2307 error.
-import Logger from "@ptkdev/logger";
+// CRITICAL FIX: We are replacing the ES6 'import' with the CommonJS 'require' 
+// and casting the module to 'any'. This is the most reliable way to bypass the 
+// TS2307 error when the third-party module lacks proper type definitions, 
+// ensuring the compiler finds the module without issue.
+const Logger: any = require("@ptkdev/logger"); 
+
 import { debugMode } from "./env.js";
 
-// Define the options object. The type assertion 'as any' will be used during instantiation
-// to prevent compilation failure if the Logger library's types are not found.
+// Define the options object.
 const options = {
     language: "en",
     colors: true,
@@ -25,8 +28,8 @@ const options = {
     }
 };
 
-// CRITICAL FIX: Use 'as any' on the options argument to bypass the TS2307 error 
-// caused by the compiler not finding type declarations for the external library.
+// The 'as any' on the options argument remains to suppress errors related to the 
+// specific structure of the LoggerOptions object.
 const logger = new Logger(options as any);
 
 export default logger;
