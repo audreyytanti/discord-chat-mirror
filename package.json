@@ -1,57 +1,32 @@
 {
-    "name": "discord-chat-mirror",
-    "version": "2.0.0",
-    "description": "Script that relays all messages from the target discord server's channel to another one using webhook. The free & open-source edition.",
-    "main": "dist/index.js",
-    "type": "module",
-    "scripts": {
-        "build": "npm run compile",
-        "compile": "tsc --build tsconfig.json",
-        "lint": "eslint . --cache --cache-file .eslintcache",
-        "lint:fix": "eslint . --cache --cache-file .eslintcache --fix",
-        "start": "node --env-file .env --es-module-specifier-resolution=node .",
-        "start:dev": "rimraf ./dist && tsc-watch --onSuccess \"node --env-file .env --es-module-specifier-resolution=node .\""
-    },
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/Stegripe/discord-chat-mirror-ext.git"
-    },
-    "author": "Stegripe <support@stegripe.org>",
-    "license": "BSD-3-Clause",
-    "bugs": {
-        "url": "https://github.com/Stegripe/discord-chat-mirror-ext/issues"
-    },
-    "homepage": "https://github.com/Stegripe/discord-chat-mirror-ext#readme",
-    "engines": {
-        "node": ">=20.6.0",
-        "pnpm": ">=8.0.0"
-    },
-    "devDependencies": {
-        "@stegripe/eslint-config": "1.0.1",
-        "@types/express": "^5.0.3",
-        "@types/jsonfile": "6.1.4",
-        "@types/node": "22.18.7",
-        "@types/node-fetch": "2.6.13",
-        "@types/ws": "^8.18.1",
-        "@typescript-eslint/eslint-plugin": "8.14.0",
-        "@typescript-eslint/parser": "8.14.0",
-        "eslint": "9.14.0",
-        "eslint-plugin-import-x": "^4.16.1",
-        "eslint-plugin-jsdoc": "^60.5.0",
-        "eslint-plugin-promise": "^7.2.1",
-        "eslint-plugin-tsdoc": "^0.4.0",
-        "eslint-plugin-unicorn": "^61.0.2",
-        "rimraf": "6.0.1",
-        "typescript": "5.6.3"
-    },
-    "dependencies": {
-        "@eslint/compat": "^1.2.3",
-        "@ptkdev/logger": "^1.8.0",
-        "discord.js": "^14.22.1",
-        "express": "^5.1.0",
-        "jsonfile": "^6.2.0",
-        "node-fetch": "^3.3.2",
-        "tsc-watch": "^7.2.0",
-        "ws": "^8.18.3"
-    }
+  "name": "discord-chat-mirror",
+  "version": "2.0.0",
+  "description": "Discord Bot to mirror messages between channels.",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "build": "npm run compile",
+    "compile": "tsc --build tsconfig.json",
+    "dev": "npm run compile && node --env-file .env dist/index.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "typescript"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/node": "^20.12.12",
+    "@types/ws": "^8.5.10",
+    "discord.js": "^14.15.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "ws": "^8.17.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "eslint": "^9.3.0",
+    "typescript": "^5.4.5"
+  }
 }
