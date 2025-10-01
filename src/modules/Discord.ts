@@ -6,9 +6,11 @@ import { setInterval } from "node:timers";
 import type { APIAttachment, APIStickerItem, GatewayReceivePayload } from "discord.js";
 import { WebhookClient, GatewayDispatchEvents, GatewayOpcodes } from "discord.js";
 
-import Websocket from "ws";
+// FIX: Use the standard WebSocket type directly from the ws package.
+import WebSocket from "ws";
 
-import type { DiscordWebhook, Things, WebsocketTypes } from "../typings/index.js";
+// FIX: Removed 'WebsocketTypes' as it was causing compilation errors due to incomplete methods/properties.
+import type { DiscordWebhook, Things } from "../typings/index.js";
 // NOTE: We will import and use the new DISCORD_MIRROR_MAP environment variable.
 import { discordToken, enableBotIndicator, headers, useWebhookProfile } from "../utils/env.js";
 
@@ -43,7 +45,7 @@ export const executeWebhook = async (things: Things): Promise<void> => {
     await wsClient.send(things);
 };
 
-let ws: WebsocketTypes | undefined; // Make ws optional since it can be undefined before initial connect
+let ws: WebSocket | undefined; // FIX: Use the correct WebSocket type from the 'ws' package
 let resumeData = {
     sessionId: "",
     resumeGatewayUrl: "",
@@ -79,7 +81,7 @@ const getWebhookId = (url: string): string | undefined => {
 const disconnectAndListen = (): void => {
     if (ws) {
         logger.info("Cleaning up old connection and listeners...");
-        // Remove all listeners to prevent memory leaks and duplicate message handling
+        // These methods are now recognized by the compiler because `ws` is typed as `WebSocket`.
         ws.removeAllListeners(); 
         // Close the socket if it's open, although it might already be closing/closed
         ws.close(); 
@@ -96,7 +98,8 @@ export const listen = (): void => {
         logger.debug(`Resume Gateway URL: ${resumeData.resumeGatewayUrl}`);
         logger.debug(`Sequence: ${resumeData.seq}`);
 
-        ws = new Websocket(resumeData.resumeGatewayUrl);
+        // FIX: Use the imported WebSocket class name
+        ws = new WebSocket(resumeData.resumeGatewayUrl);
         ws.send(
             JSON.stringify({
                 op: 6,
@@ -111,7 +114,8 @@ export const listen = (): void => {
         );
     } else {
         logger.info("Starting new connection...");
-        ws = new Websocket("wss://gateway.discord.gg/?v=10&encoding=json");
+        // FIX: Use the imported WebSocket class name
+        ws = new WebSocket("wss://gateway.discord.gg/?v=10&encoding=json");
     }
 
     ws.on("open", () => {
@@ -119,13 +123,15 @@ export const listen = (): void => {
     });
     
     // FIX for Issue 2: Reconnect on error
+    // The `ws` typings expect `err` to be an Error object or similar, so we ensure reliable logging.
     ws.on('error', (err) => {
-        logger.error(`WebSocket Error: ${err.message}. Reconnecting...`);
+        logger.error(`WebSocket Error: ${err.toString()}. Reconnecting...`);
         disconnectAndListen();
     });
     
     // FIX for Issue 2: Reconnect on close
-    ws.on("close", (code, reason) => {
+    // FIX for Error 3: Explicitly type the arguments to satisfy the TypeScript compiler.
+    ws.on("close", (code: number, reason: Buffer) => {
         logger.warn(`Connection closed (Code: ${code}, Reason: ${reason.toString()}). Attempting to reconnect...`);
         disconnectAndListen();
     });
@@ -149,7 +155,7 @@ export const listen = (): void => {
 
                 setInterval(() => {
                     // Check if ws is still defined and open before sending heartbeat
-                    if (ws && ws.readyState === Websocket.OPEN) {
+                    if (ws && ws.readyState === WebSocket.OPEN) { // FIX: Use WebSocket.OPEN (and now recognized)
                         ws.send(
                             JSON.stringify({
                                 op: 1,
