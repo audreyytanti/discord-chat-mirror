@@ -20,11 +20,9 @@ const BLOCKED_USER_IDS = ["859535759501033534", "1422307880899444766", "68122684
 
 
 // =========================================================================
-// === NEW: CONFIGURATION PARSING FOR MULTI-CHANNEL ROUTING ===
-// We use the DISCORD_MIRROR_MAP environment variable (a JSON string) 
-// to define all source-to-destination mappings.
+// === CONFIGURATION PARSING FOR MULTI-CHANNEL ROUTING ===
 // =========================================================================
-const RAW_MIRROR_MAP_JSON = process.env.DISCORD_MIRROR_MAP || "{}"; 
+const RAW_MIRROR_MAP_JSON = process.env.DISCORD_MIRROR_MAP || "{}";
 let MIRROR_MAP: Record<string, string[]> = {};
 try {
     MIRROR_MAP = JSON.parse(RAW_MIRROR_MAP_JSON);
@@ -36,7 +34,6 @@ try {
 const CHANNELS_TO_LISTEN = Object.keys(MIRROR_MAP);
 
 // 2. Derive the list of ALL destination webhook URLs (flattened values of the map)
-// This is used exclusively for deriving webhook IDs for loop prevention.
 const ALL_DESTINATION_WEBHOOKS = Object.values(MIRROR_MAP).flat();
 // =========================================================================
 
@@ -46,14 +43,14 @@ export const executeWebhook = async (things: Things): Promise<void> => {
     await wsClient.send(things);
 };
 
-let ws: WebsocketTypes;
+let ws: WebsocketTypes | undefined; // Make ws optional since it can be undefined before initial connect
 let resumeData = {
     sessionId: "",
     resumeGatewayUrl: "",
     seq: 0
 };
 let authenticated = false;
-let botId: string | undefined; 
+let botId: string | undefined;
 
 // Store the IDs of our own destination webhooks to prevent self-looping.
 let destinationWebhookIds: string[] = [];
@@ -74,6 +71,23 @@ const getWebhookId = (url: string): string | undefined => {
         return undefined;
     }
 };
+
+/**
+ * Ensures the existing WebSocket connection is cleaned up before starting a new one.
+ * FIX for Issue 2: Prevents multiple listeners (double posting).
+ */
+const disconnectAndListen = (): void => {
+    if (ws) {
+        logger.info("Cleaning up old connection and listeners...");
+        // Remove all listeners to prevent memory leaks and duplicate message handling
+        ws.removeAllListeners(); 
+        // Close the socket if it's open, although it might already be closing/closed
+        ws.close(); 
+    }
+    // Start the new listening process
+    listen(); 
+};
+
 
 export const listen = (): void => {
     if (resumeData.sessionId && resumeData.resumeGatewayUrl) {
@@ -96,6 +110,7 @@ export const listen = (): void => {
             })
         );
     } else {
+        logger.info("Starting new connection...");
         ws = new Websocket("wss://gateway.discord.gg/?v=10&encoding=json");
     }
 
@@ -103,9 +118,16 @@ export const listen = (): void => {
         logger.info("Connected to the Discord WSS.");
     });
     
-    // Handle the ECONNRESET error gracefully
+    // FIX for Issue 2: Reconnect on error
     ws.on('error', (err) => {
-        logger.error(`WebSocket Error: ${err.message}. Connection will attempt to restart.`);
+        logger.error(`WebSocket Error: ${err.message}. Reconnecting...`);
+        disconnectAndListen();
+    });
+    
+    // FIX for Issue 2: Reconnect on close
+    ws.on("close", (code, reason) => {
+        logger.warn(`Connection closed (Code: ${code}, Reason: ${reason.toString()}). Attempting to reconnect...`);
+        disconnectAndListen();
     });
 
     ws.on("message", async (data: [any]) => {
@@ -118,7 +140,7 @@ export const listen = (): void => {
                 logger.info("Hello event received. Starting heartbeat...");
 
                 // Send the first Heartbeat immediately, using the tracked sequence number (0 or null)
-                ws.send(
+                ws!.send( // Using non-null assertion as it must be defined here
                     JSON.stringify({
                         op: 1,
                         d: getCurrentSequence()
@@ -126,21 +148,23 @@ export const listen = (): void => {
                 );
 
                 setInterval(() => {
-                    ws.send(
-                        JSON.stringify({
-                            op: 1,
-                            d: getCurrentSequence() // Use the tracked sequence number
-                        })
-                    );
-
-                    logger.debug("Heartbeat sent.");
+                    // Check if ws is still defined and open before sending heartbeat
+                    if (ws && ws.readyState === Websocket.OPEN) {
+                        ws.send(
+                            JSON.stringify({
+                                op: 1,
+                                d: getCurrentSequence() // Use the tracked sequence number
+                            })
+                        );
+                        logger.debug("Heartbeat sent.");
+                    }
                 }, d.heartbeat_interval);
 
                 logger.info("Heartbeat started.");
                 break;
             case GatewayOpcodes.Heartbeat:
                 logger.debug("Discord requested an immediate heartbeat.");
-                ws.send(
+                ws!.send(
                     JSON.stringify({
                         op: 1,
                         d: getCurrentSequence() // Use the tracked sequence number
@@ -151,7 +175,7 @@ export const listen = (): void => {
             case GatewayOpcodes.HeartbeatAck:
                 if (!authenticated) {
                     authenticated = true;
-                    ws.send(
+                    ws!.send(
                         JSON.stringify({
                             op: 2,
                             d: {
@@ -173,7 +197,6 @@ export const listen = (): void => {
                         seq: s
                     };
                     botId = d.user.id; // Store the bot's own ID
-                    // UPDATED: Use Number() check to filter out "0" and "0000"
                     logger.info(`Logged in as ${d.user.username}${d.user.discriminator && Number(d.user.discriminator) !== 0 ? `#${d.user.discriminator}` : ""}. Bot ID: ${botId}`);
                 
                     // NEW: Initialize the destinationWebhookIds list only once upon READY
@@ -211,7 +234,6 @@ export const listen = (): void => {
                     }
 
                     // 2. CRITICAL: LOOP PREVENTION. 
-                    // We only skip if the message came from one of *our* configured destination webhooks.
                     if (webhook_id && destinationWebhookIds.includes(webhook_id)) {
                         logger.info(`LOOP PREVENTION: Skipping message from OWN webhook ID ${webhook_id}.`);
                         return;
@@ -223,7 +245,7 @@ export const listen = (): void => {
                     logger.info(`--- Message Received ---`);
                     logger.info(`ID: ${messageId} | Channel: ${channelId}`);
                     logger.info(`Author ID: ${authorId} (Blocked? ${BLOCKED_USER_IDS.includes(authorId)})`);
-                    logger.info(`Is Webhook: ${!!webhook_id}`); 
+                    logger.info(`Is Webhook: ${!!webhook_id}`);
                     logger.info(`Content Start: "${content?.substring(0, 50).replace(/\n/g, '\\n')}..."`);
                     if (webhook_id) {
                          logger.info(`PROXY/WEBHOOK DETECTED: Allowing message from external webhook ID ${webhook_id} to be mirrored.`);
@@ -232,16 +254,13 @@ export const listen = (): void => {
                     
                     
                     // --- TARGETED BLOCK FILTER ---
-                    // This blocks any message that is *not* a webhook but *is* from a blocked user (e.g., the Tupperbox command).
                     if (BLOCKED_USER_IDS.includes(authorId) && !webhook_id) {
                         logger.info(`TARGETED BLOCK HIT: Skipping non-webhook command message from ${author.username}.`);
                         return;
                     }
 
                     // --- FALLBACK COMMAND/CONTENT FILTERS (Safety measures) ---
-                    
-                    // Only apply these content-based filters if it is NOT a webhook message AND not from a blocked user ID.
-                    if (!webhook_id) { 
+                    if (!webhook_id) {
                         const trimmedContent = content?.trim();
                         const lowerTrimmedContent = trimmedContent?.toLowerCase();
                         
@@ -268,7 +287,7 @@ export const listen = (): void => {
                         
                         if (!hasContent && !hasAttachments && !hasEmbeds) {
                              logger.info(`EMPTY CONTENT GUARD: Skipping message with no content (likely a deleted command).`);
-                            return;
+                             return;
                         }
                     }
                     // --- END FALLBACK FILTERS ---
@@ -286,14 +305,12 @@ export const listen = (): void => {
 
 
                     // ===============================================================
-                    // === MIRRORING LOGIC (Using the new MIRROR_MAP) ===
+                    // === MIRRORING LOGIC ===
                     // ===============================================================
                     
-                    // Get the specific list of destination webhooks for this source channel.
                     const targetWebhooks: string[] | undefined = MIRROR_MAP[channelId];
                     
                     if (!targetWebhooks || targetWebhooks.length === 0) {
-                        // FIX: Changed logger.warn to logger.info
                         logger.info(`WARNING: No destination webhooks found for source channel ID ${channelId} in MIRROR_MAP. Skipping.`);
                         return;
                     }
@@ -312,20 +329,21 @@ export const listen = (): void => {
                             username: `${username}${discriminatorSuffix}${enableBotIndicator ? ub : ""}`
                         };
 
+                        // FIX for Issue 1: Removed the conditional block that overrides the source profile.
+                        // The 'useWebhookProfile' logic was incorrectly mixing the destination webhook's ID
+                        // with the source profile data, causing the profile picture to fail loading.
                         if (useWebhookProfile) {
+                            // We must fetch the webhook to get its default name, but we intentionally 
+                            // skip overriding the avatarURL here to ensure impersonation works.
                             const webhookData = await fetch(webhookUrl, {
                                 method: "GET",
                                 headers
                             });
-
                             const tes: DiscordWebhook = (await webhookData.json()) as DiscordWebhook;
-                            let ext2 = "jpg";
-                            if (tes.avatar?.startsWith("a_") ?? false) ext2 = "gif";
-                            things.avatarURL = `https://cdn.discordapp.com/avatars/${tes.id}/${tes.avatar}.${ext2}`;
+                            // Only override the username, maintaining the source avatar for impersonation
                             things.username = tes.name;
                         }
-
-                          
+                        
                         if (embeds.length > 0) {
                             things.embeds = embeds;
                         } else if (sticker_items) {
@@ -333,7 +351,7 @@ export const listen = (): void => {
                         } else if (attachments.length > 0) {
                             const fileSizeInBytes = Math.max(...attachments.map((a: APIAttachment) => a.size));
                             // Corrected the file size calculation (1024 * 1024)
-                            const fileSizeInMegabytes = fileSizeInBytes / (1_024 * 1_024); 
+                            const fileSizeInMegabytes = fileSizeInBytes / (1_024 * 1_024);
                             if (fileSizeInMegabytes < 8) {
                                 things.files = attachments.map((a: APIAttachment) => a.url);
                             } else {
@@ -345,22 +363,24 @@ export const listen = (): void => {
                 }
                 break;
             case GatewayOpcodes.Reconnect: {
-                logger.info("Reconnecting...");
-                listen();
+                logger.info("Reconnect request received. Reconnecting...");
+                // FIX for Issue 2: Use the cleanup function
+                disconnectAndListen();
                 break;
             }
             case GatewayOpcodes.InvalidSession:
                 logger.info("Invalid session.");
                 if (d) {
-                    logger.info("Can retry, reconnecting...");
-                    listen();
+                    logger.info("Can retry (d=true), reconnecting...");
+                    // FIX for Issue 2: Use the cleanup function
+                    disconnectAndListen();
                 } else {
-                    logger.error("Cannot retry, exiting...");
+                    logger.error("Cannot retry (d=false), exiting...");
                     process.exit(1);
                 }
                 break;
             default:
-                logger.info("Unhandled opcode:", op);
+                logger.debug(`Unhandled opcode: ${op}`);
                 break;
         }
     });
