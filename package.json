@@ -22,7 +22,8 @@
     "discord.js": "^14.15.2",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "ws": "^8.17.0"
+    "ws": "^8.17.0",
+    "@ptkdev/logger": "^1.8.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
